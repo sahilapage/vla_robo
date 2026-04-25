@@ -3,144 +3,238 @@
 
   <compiler angle="radian" meshdir="assets" autolimits="true"/>
 
-  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+  <option
+    timestep   = "0.001"
+    gravity    = "0 0 -9.81"
+    integrator = "implicitfast"
+    cone       = "elliptic"
+    impratio   = "10"
+    iterations = "80"
+    noslip_iterations = "3"/>
 
+  <!-- ══════════════════════════════════════════════════════════════════
+    DEFAULTS
+    ─────────────────────────────────────────────────────────────────
+    BUG FIX: removed `limited="true"` from arm_joint class.
+    When `limited="true"` is set in a default class WITHOUT a range,
+    MuJoCo locks the joint at 0. Each joint declares its own range,
+    which implicitly enables limits. This was silently locking
+    shoulder_pan (and would have locked all joints).
+  ══════════════════════════════════════════════════════════════════════ -->
   <default>
-    <joint damping="0.5" frictionloss="0.1" armature="0.01"/>
-    <geom contype="1" conaffinity="1" condim="3" friction="0.8 0.02 0.01"/>
-    <motor ctrllimited="true" ctrlrange="-1 1"/>
-    <position kp="50" kv="5" ctrllimited="true"/>
+
+    <default class="arm_joint">
+      <!-- NO limited="true" here — each joint sets its own range -->
+      <joint type="hinge" damping="0.5" frictionloss="0.1" armature="0.01"/>
+    </default>
+
+    <!-- Visual mesh geoms — rendering only, zero collision -->
+    <default class="visual">
+      <geom contype="0" conaffinity="0" group="1" mass="0"/>
+    </default>
+
+    <!-- Collision proxy geoms — invisible capsules/boxes -->
+    <default class="collision">
+      <geom contype="1" conaffinity="1"
+            condim="6"
+          margin="0.0015"
+            friction="0.8 0.02 0.01"
+          solref="0.002 1"
+          solimp="0.995 0.999 0.0005 0.5 2"
+            rgba="0 0 0 0"/>
+    </default>
+
+    <!-- Gripper finger proxies — higher friction for grasping -->
+    <default class="gripper_col">
+      <geom contype="1" conaffinity="1"
+            condim="6"
+          margin="0.003"
+            friction="2.0 0.05 0.01"
+            solref="0.002 1"
+          solimp="0.995 0.999 0.0005 0.5 2"
+            rgba="0 0 0 0"/>
+    </default>
+
+    <default class="arm_act">
+      <position kp="80" kv="8" ctrllimited="true" forcelimited="true" forcerange="-8 8"/>
+    </default>
+
   </default>
 
+  <!-- ── Assets ────────────────────────────────────────────────────── -->
   <asset>
-    <!-- Meshes -->
-    <mesh name="Base"                 file="Base.stl"                scale="1 1 1"/>
-    <mesh name="Base_Motor"           file="Base_Motor.stl"          scale="1 1 1"/>
-    <mesh name="Rotation_Pitch"       file="Rotation_Pitch.stl"      scale="1 1 1"/>
-    <mesh name="Rotation_Pitch_Motor" file="Rotation_Pitch_Motor.stl"scale="1 1 1"/>
-    <mesh name="Upper_Arm"            file="Upper_Arm.stl"           scale="1 1 1"/>
-    <mesh name="Upper_Arm_Motor"      file="Upper_Arm_Motor.stl"     scale="1 1 1"/>
-    <mesh name="Lower_Arm"            file="Lower_Arm.stl"           scale="1 1 1"/>
-    <mesh name="Lower_Arm_Motor"      file="Lower_Arm_Motor.stl"     scale="1 1 1"/>
-    <mesh name="Wrist_Pitch_Roll"     file="Wrist_Pitch_Roll.stl"    scale="1 1 1"/>
-    <mesh name="Wrist_Pitch_Roll_Motor" file="Wrist_Pitch_Roll_Motor.stl" scale="1 1 1"/>
-    <mesh name="Fixed_Jaw"            file="Fixed_Jaw.stl"           scale="1 1 1"/>
-    <mesh name="Fixed_Jaw_Motor"      file="Fixed_Jaw_Motor.stl"     scale="1 1 1"/>
-    <mesh name="Moving_Jaw"           file="Moving_Jaw.stl"          scale="1 1 1"/>
+    <mesh name="Base"                   file="Base.stl"/>
+    <mesh name="Base_Motor"             file="Base_Motor.stl"/>
+    <mesh name="Rotation_Pitch"         file="Rotation_Pitch.stl"/>
+    <mesh name="Rotation_Pitch_Motor"   file="Rotation_Pitch_Motor.stl"/>
+    <mesh name="Upper_Arm"              file="Upper_Arm.stl"/>
+    <mesh name="Upper_Arm_Motor"        file="Upper_Arm_Motor.stl"/>
+    <mesh name="Lower_Arm"              file="Lower_Arm.stl"/>
+    <mesh name="Lower_Arm_Motor"        file="Lower_Arm_Motor.stl"/>
+    <mesh name="Wrist_Pitch_Roll"       file="Wrist_Pitch_Roll.stl"/>
+    <mesh name="Wrist_Pitch_Roll_Motor" file="Wrist_Pitch_Roll_Motor.stl"/>
+    <mesh name="Fixed_Jaw"              file="Fixed_Jaw.stl"/>
+    <mesh name="Fixed_Jaw_Motor"        file="Fixed_Jaw_Motor.stl"/>
+    <mesh name="Moving_Jaw"             file="Moving_Jaw.stl"/>
 
-    <!-- Materials -->
     <material name="3d_printed" rgba="1.0 0.82 0.12 1.0"/>
-    <material name="sts3215"    rgba="0.1 0.1 0.1 1.0"/>
-    <material name="ground"     rgba="0.5 0.5 0.5 1.0"/>
+    <material name="sts3215"    rgba="0.1 0.1  0.1  1.0"/>
   </asset>
 
+  <!-- ══════════════════════════════════════════════════════════════════
+    WORLDBODY
+    ─────────────────────────────────────────────────────────────────
+    ARM PLACEMENT (pick-and-place layout):
+
+      Table top surface:  z = 0.46 m
+      Arm base:           x=0,    y=-0.25,  z=0.46   (back of table)
+      Block (pick):       x=0,    y=-0.08,  z=0.485  (0.215m from shoulder → reachable)
+      Place zone:         x=0.15, y=-0.08,  z=0.462  (to the right of block)
+
+    Shoulder world position after offsets:
+      y = -0.25 + (-0.0452) = -0.295
+      z = 0.46 + 0.0165     =  0.477
+    Max horizontal reach (upper 0.1025 + lower 0.135) ≈ 0.237 m
+    Block distance from shoulder ≈ 0.215 m  →  comfortably reachable.
+  ══════════════════════════════════════════════════════════════════════ -->
   <worldbody>
-    <!-- Ground plane -->
-    <geom name="floor" type="plane" size="1 1 0.1" material="ground" pos="0 0 0"/>
 
-    <!-- Lighting -->
-    <light name="top"  pos="0 0 2" dir="0 0 -1" diffuse="0.8 0.8 0.8"/>
-    <light name="side" pos="1 1 1" dir="-1 -1 -1" diffuse="0.4 0.4 0.4"/>
+    <!-- ── Base: fixed to table, no joint ── -->
+    <body name="base" pos="0 -0.25 0.472">
+      <inertial mass="0.5" pos="0 0 0.02" diaginertia="0.002 0.002 0.002"/>
+      <geom class="visual"    type="mesh" mesh="Base"       material="3d_printed"/>
+      <geom class="visual"    type="mesh" mesh="Base_Motor" material="sts3215"/>
+      <geom class="collision" type="box"  size="0.055 0.055 0.022" pos="0 0 0.011"/>
 
-    <!-- Base link — fixed to world -->
-    <body name="base" pos="0 0 0.02">
-      <inertial mass="1.0" pos="0 0 0" diaginertia="0.01 0.01 0.01"/>
-      <geom type="mesh" mesh="Base"       material="3d_printed" contype="0" conaffinity="0"/>
-      <geom type="mesh" mesh="Base_Motor" material="sts3215"    contype="0" conaffinity="0"/>
-      <!-- Simplified collision box for base -->
-      <geom type="box" size="0.05 0.05 0.02" pos="0 0 0.01" contype="1" conaffinity="1" rgba="0 0 0 0"/>
+      <!-- ── Joint 1: shoulder_pan — yaw around world Z ──
+           Body frame is rotated +90° around X by the euler below,
+           so local Y → world Z. axis="0 1 0" in local = world Z = yaw. ✓ -->
+      <body name="shoulder" pos="0 -0.0452 0.0165" euler="1.5708 0 0">
+        <inertial mass="0.119" pos="0 0.059 0.031"
+                  diaginertia="5.9e-05 5.9e-05 3.1e-05"/>
+        <joint name="shoulder_pan" class="arm_joint"
+               axis="0 1 0" range="-2.0 2.0"/>
+        <geom class="visual"    type="mesh" mesh="Rotation_Pitch"       material="3d_printed"/>
+        <geom class="visual"    type="mesh" mesh="Rotation_Pitch_Motor" material="sts3215"/>
+          <geom class="collision" type="capsule" size="0.020"
+            fromto="0 0.010 0  0 0.060 0"/>
 
-      <!-- shoulder_pan: revolute, axis Y (after rpy="1.57079 0 0" offset) -->
-      <body name="shoulder" pos="0 -0.0452 0.0165" euler="1.57079 0 0">
-        <inertial mass="0.119226"
-                  pos="-9.07886e-05 0.0590972 0.031089"
-                  diaginertia="5.94278e-05 5.89975e-05 3.13712e-05"/>
-        <joint name="shoulder_pan" type="hinge" axis="0 1 0"
-               range="-2 2" damping="0.5" frictionloss="0.1"/>
-        <geom type="mesh" mesh="Rotation_Pitch"       material="3d_printed" contype="0" conaffinity="0"/>
-        <geom type="mesh" mesh="Rotation_Pitch_Motor" material="sts3215"    contype="0" conaffinity="0"/>
-
-        <!-- shoulder_lift: revolute, axis X, rpy="-1.8 0 0" -->
+        <!-- ── Joint 2: shoulder_lift ── -->
         <body name="upper_arm" pos="0 0.1025 0.0306" euler="-1.8 0 0">
-          <inertial mass="0.162409"
-                    pos="-1.72052e-05 0.0701802 0.00310545"
-                    diaginertia="0.000213312 0.000167164 7.01522e-05"/>
-          <joint name="shoulder_lift" type="hinge" axis="1 0 0"
-                 range="0 3.5" damping="0.5" frictionloss="0.1"/>
-          <geom type="mesh" mesh="Upper_Arm"       material="3d_printed" contype="0" conaffinity="0"/>
-          <geom type="mesh" mesh="Upper_Arm_Motor" material="sts3215"    contype="0" conaffinity="0"/>
+          <inertial mass="0.162" pos="0 0.070 0.003"
+                    diaginertia="2.1e-04 1.7e-04 7.0e-05"/>
+          <joint name="shoulder_lift" class="arm_joint"
+                 axis="1 0 0" range="0.0 3.5"/>
+          <geom class="visual"    type="mesh" mesh="Upper_Arm"       material="3d_printed"/>
+          <geom class="visual"    type="mesh" mesh="Upper_Arm_Motor" material="sts3215"/>
+          <geom class="collision" type="capsule" size="0.025"
+                fromto="0 0.005 0  0 0.100 0"/>
 
-          <!-- elbow_flex: revolute, axis X, rpy="1.57079 0 0" -->
-          <body name="lower_arm" pos="0 0.11257 0.028" euler="1.57079 0 0">
-            <inertial mass="0.147968"
-                      pos="-0.00339604 0.00137796 0.0768007"
-                      diaginertia="0.000138803 0.000107748 4.84242e-05"/>
-            <joint name="elbow_flex" type="hinge" axis="1 0 0"
-                   range="-3.14158 0" damping="0.5" frictionloss="0.1"/>
-            <geom type="mesh" mesh="Lower_Arm"       material="3d_printed" contype="0" conaffinity="0"/>
-            <geom type="mesh" mesh="Lower_Arm_Motor" material="sts3215"    contype="0" conaffinity="0"/>
+          <!-- ── Joint 3: elbow_flex ── -->
+          <body name="lower_arm" pos="0 0.11257 0.028" euler="1.5708 0 0">
+            <inertial mass="0.148" pos="0 0.001 0.077"
+                      diaginertia="1.4e-04 1.1e-04 4.8e-05"/>
+            <joint name="elbow_flex" class="arm_joint"
+                   axis="1 0 0" range="-3.14158 0.0"/>
+            <geom class="visual"    type="mesh" mesh="Lower_Arm"       material="3d_printed"/>
+            <geom class="visual"    type="mesh" mesh="Lower_Arm_Motor" material="sts3215"/>
+            <geom class="collision" type="capsule" size="0.022"
+                  fromto="0 0.005 0  0 0.005 0.120"/>
 
-            <!-- wrist_flex: revolute, axis X, rpy="-1 0 0" -->
-            <body name="wrist" pos="0 0.0052 0.1349" euler="-1 0 0">
-              <inertial mass="0.0661321"
-                        pos="-0.00852653 -0.0352279 -2.34622e-05"
-                        diaginertia="3.45403e-05 2.39041e-05 1.94704e-05"/>
-              <joint name="wrist_flex" type="hinge" axis="1 0 0"
-                     range="-2.5 1.2" damping="0.3" frictionloss="0.05"/>
-              <geom type="mesh" mesh="Wrist_Pitch_Roll"       material="3d_printed" contype="0" conaffinity="0"/>
-              <geom type="mesh" mesh="Wrist_Pitch_Roll_Motor" material="sts3215"    contype="0" conaffinity="0"/>
+            <!-- ── Joint 4: wrist_flex ── -->
+            <body name="wrist" pos="0 0.0052 0.1349" euler="-1.0 0 0">
+              <inertial mass="0.066" pos="-0.009 -0.035 0"
+                        diaginertia="3.5e-05 2.4e-05 1.9e-05"/>
+              <joint name="wrist_flex" class="arm_joint"
+                     axis="1 0 0" range="-2.5 1.2"
+                     damping="0.3" frictionloss="0.05"/>
+              <geom class="visual"    type="mesh" mesh="Wrist_Pitch_Roll"       material="3d_printed"/>
+              <geom class="visual"    type="mesh" mesh="Wrist_Pitch_Roll_Motor" material="sts3215"/>
+              <geom class="collision" type="capsule" size="0.020"
+                    fromto="0 0 0  0 -0.050 0"/>
 
-              <!-- wrist_roll: revolute, axis Y, rpy="0 1.57079 0" -->
-              <body name="gripper" pos="0 -0.0601 0" euler="0 1.57079 0">
-                <inertial mass="0.0929859"
-                          pos="0.00552377 -0.0280167 0.000483583"
-                          diaginertia="5.03136e-05 4.64098e-05 2.72961e-05"/>
-                <joint name="wrist_roll" type="hinge" axis="0 1 0"
-                       range="-3.14158 3.14158" damping="0.3" frictionloss="0.05"/>
-                <geom type="mesh" mesh="Fixed_Jaw"       material="3d_printed" contype="0" conaffinity="0"/>
-                <geom type="mesh" mesh="Fixed_Jaw_Motor" material="sts3215"    contype="0" conaffinity="0"/>
+              <!-- ── Joint 5: wrist_roll ── -->
+              <body name="gripper_body" pos="0 -0.0601 0" euler="0 1.5708 0">
+                <inertial mass="0.093" pos="0.006 -0.028 0"
+                          diaginertia="5.0e-05 4.6e-05 2.7e-05"/>
+                <joint name="wrist_roll" class="arm_joint"
+                       axis="0 1 0" range="-3.14158 3.14158"
+                       damping="0.3" frictionloss="0.05"/>
+                <geom class="visual"   type="mesh" mesh="Fixed_Jaw"       material="3d_printed"/>
+                <geom class="visual"   type="mesh" mesh="Fixed_Jaw_Motor" material="sts3215"/>
+                <!-- Palm collision box -->
+                <geom class="gripper_col" type="box"
+                      size="0.020 0.018 0.012" pos="0 -0.030 0"/>
+                    <!-- Fixed finger collision capsule -->
+                    <geom class="gripper_col" type="capsule"
+                      fromto="0.002 -0.010 0  0.002 -0.050 0" size="0.009"/>
 
-                <!-- gripper jaw: revolute, axis Z, rpy="0 3.14158 0" -->
+                <!-- End-effector site (between fingers at tip) -->
+                <site name="ee_site" pos="0 -0.072 0" size="0.007" rgba="0 1 0 1"/>
+
+                <!-- ── Joint 6: gripper jaw ── -->
                 <body name="jaw" pos="-0.0202 -0.0244 0" euler="0 3.14158 0">
-                  <inertial mass="0.0202444"
-                            pos="-0.00161745 -0.0303473 0.000449646"
-                            diaginertia="1.11265e-05 8.99651e-06 2.99548e-06"/>
-                  <joint name="gripper_jaw" type="hinge" axis="0 0 1"
-                         range="-0.2 2.0" damping="0.2" frictionloss="0.05"/>
-                  <geom type="mesh" mesh="Moving_Jaw" material="3d_printed" contype="0" conaffinity="0"/>
+                  <inertial mass="0.020" pos="-0.002 -0.030 0"
+                            diaginertia="1.1e-05 9.0e-06 3.0e-06"/>
+                  <joint name="gripper_jaw" class="arm_joint"
+                         axis="0 0 1" range="-0.2 2.0"
+                         damping="0.2" frictionloss="0.05"/>
+                  <geom class="visual"      type="mesh" mesh="Moving_Jaw" material="3d_printed"/>
+                  <!-- Moving finger collision capsule -->
+                  <geom class="gripper_col" type="capsule" size="0.009"
+                    fromto="-0.002 -0.010 0  -0.002 -0.050 0"/>
+                  <!-- Touch sensor sites at fingertip -->
+                  <site name="finger_tip_l" pos="-0.002 -0.045  0.007" size="0.005" rgba="1 0 0 1"/>
+                  <site name="finger_tip_r" pos="-0.002 -0.045 -0.007" size="0.005" rgba="0 0 1 1"/>
                 </body>
+
               </body>
             </body>
           </body>
         </body>
       </body>
     </body>
+
   </worldbody>
 
-  <!-- Position actuators for each joint -->
+  <!-- ── Actuators ──────────────────────────────────────────────────── -->
   <actuator>
-    <position name="shoulder_pan"  joint="shoulder_pan"  kp="60" kv="6"  ctrlrange="-2 2"/>
-    <position name="shoulder_lift" joint="shoulder_lift" kp="60" kv="6"  ctrlrange="0 3.5"/>
-    <position name="elbow_flex"    joint="elbow_flex"    kp="60" kv="6"  ctrlrange="-3.14158 0"/>
-    <position name="wrist_flex"    joint="wrist_flex"    kp="40" kv="4"  ctrlrange="-2.5 1.2"/>
-    <position name="wrist_roll"    joint="wrist_roll"    kp="40" kv="4"  ctrlrange="-3.14158 3.14158"/>
-    <position name="gripper_jaw"       joint="gripper_jaw"   kp="20" kv="2"  ctrlrange="-0.2 2.0"/>
+    <position name="shoulder_pan"  joint="shoulder_pan"  class="arm_act" ctrlrange="-2.0 2.0"/>
+    <position name="shoulder_lift" joint="shoulder_lift" class="arm_act" ctrlrange="0.0 3.5"/>
+    <position name="elbow_flex"    joint="elbow_flex"    class="arm_act" ctrlrange="-3.14158 0.0"/>
+    <position name="wrist_flex"    joint="wrist_flex"    class="arm_act" kp="40" kv="5" ctrlrange="-2.5 1.2"/>
+    <position name="wrist_roll"    joint="wrist_roll"    class="arm_act" kp="40" kv="5" ctrlrange="-3.14158 3.14158"/>
+    <position name="gripper_jaw"   joint="gripper_jaw"   class="arm_act" kp="25" kv="3" ctrlrange="-0.2 2.0"/>
   </actuator>
 
-  <!-- Sensors (optional but useful) -->
+  <!-- ── Sensors ────────────────────────────────────────────────────── -->
   <sensor>
-    <jointpos name="sensor_shoulder_pan"  joint="shoulder_pan"/>
-    <jointpos name="sensor_shoulder_lift" joint="shoulder_lift"/>
-    <jointpos name="sensor_elbow_flex"    joint="elbow_flex"/>
-    <jointpos name="sensor_wrist_flex"    joint="wrist_flex"/>
-    <jointpos name="sensor_wrist_roll"    joint="wrist_roll"/>
-    <jointpos name="sensor_gripper"       joint="gripper_jaw"/>
-    <jointvel name="sensor_vel_shoulder_pan"  joint="shoulder_pan"/>
-    <jointvel name="sensor_vel_shoulder_lift" joint="shoulder_lift"/>
-    <jointvel name="sensor_vel_elbow_flex"    joint="elbow_flex"/>
-    <jointvel name="sensor_vel_wrist_flex"    joint="wrist_flex"/>
-    <jointvel name="sensor_vel_wrist_roll"    joint="wrist_roll"/>
-    <jointvel name="sensor_vel_gripper"       joint="gripper_jaw"/>
+    <jointpos name="qpos_shoulder_pan"  joint="shoulder_pan"/>
+    <jointpos name="qpos_shoulder_lift" joint="shoulder_lift"/>
+    <jointpos name="qpos_elbow_flex"    joint="elbow_flex"/>
+    <jointpos name="qpos_wrist_flex"    joint="wrist_flex"/>
+    <jointpos name="qpos_wrist_roll"    joint="wrist_roll"/>
+    <jointpos name="qpos_gripper"       joint="gripper_jaw"/>
+
+    <jointvel name="qvel_shoulder_pan"  joint="shoulder_pan"/>
+    <jointvel name="qvel_shoulder_lift" joint="shoulder_lift"/>
+    <jointvel name="qvel_elbow_flex"    joint="elbow_flex"/>
+    <jointvel name="qvel_wrist_flex"    joint="wrist_flex"/>
+    <jointvel name="qvel_wrist_roll"    joint="wrist_roll"/>
+    <jointvel name="qvel_gripper"       joint="gripper_jaw"/>
+
+    <actuatorfrc name="frc_shoulder_pan"  actuator="shoulder_pan"/>
+    <actuatorfrc name="frc_shoulder_lift" actuator="shoulder_lift"/>
+    <actuatorfrc name="frc_elbow_flex"    actuator="elbow_flex"/>
+    <actuatorfrc name="frc_wrist_flex"    actuator="wrist_flex"/>
+    <actuatorfrc name="frc_wrist_roll"    actuator="wrist_roll"/>
+    <actuatorfrc name="frc_gripper"       actuator="gripper_jaw"/>
+
+    <framepos  name="ee_pos"  objtype="site" objname="ee_site"/>
+    <framequat name="ee_quat" objtype="site" objname="ee_site"/>
+
+    <touch name="touch_finger_l" site="finger_tip_l"/>
+    <touch name="touch_finger_r" site="finger_tip_r"/>
   </sensor>
 
 </mujoco>

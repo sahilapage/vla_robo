@@ -1,0 +1,194 @@
+<mujoco model="scene">
+
+  <!--
+    ══════════════════════════════════════════════════════════════════
+    Pick-and-Place Scene — SO-100 Arm
+    ══════════════════════════════════════════════════════════════════
+
+    World layout (Y = forward from arm base):
+
+                        +X →
+        ┌──────────────────────────────────┐
+        │  table top  z=0.46               │
+        │                                  │  +Y
+        │  [PLACE]          [BLOCK]        │   ↑
+        │  x=0.15,y=-0.08   x=0,y=-0.08   │
+        │                                  │
+        │          [ARM BASE]              │
+        │          x=0, y=-0.25            │
+        └──────────────────────────────────┘
+
+    Z heights:
+      Floor:            z = 0.00
+      Table top:        z = 0.44 + 0.02  = 0.46
+      Block centre:     z = 0.46  + 0.025 = 0.485
+      Place zone top:   z = 0.46  + 0.001 = 0.461
+
+    Arm reach check:
+      Shoulder world y = -0.25 - 0.0452 = -0.295
+      Block y = -0.08  →  distance = 0.215 m  ✓ (max reach ~0.237 m)
+  ══════════════════════════════════════════════════════════════════ -->
+
+  <include file="so100.xml"/>
+
+  <!-- ── Visuals ──────────────────────────────────────────────────── -->
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="160" elevation="-20"/>
+  </visual>
+
+  <!-- ── Assets ───────────────────────────────────────────────────── -->
+  <asset>
+    <texture type="skybox" builtin="gradient"
+             rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge"
+             rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+             markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane"
+              texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="table_top"  rgba="0.85 0.80 0.70 1" reflectance="0.04"/>
+    <material name="table_leg"  rgba="0.40 0.30 0.20 1"/>
+    <material name="block_red"  rgba="0.85 0.20 0.20 1"/>
+    <material name="place_zone" rgba="0.20 0.80 0.20 0.50"/>
+  </asset>
+
+  <!-- ══════════════════════════════════════════════════════════════
+    CONTACT EXCLUSIONS
+    ────────────────────────────────────────────────────────────────
+    Exclude adjacent arm links from colliding with each other.
+    Exclude arm base from colliding with the table it sits on.
+    This prevents jitter and solver fighting between touching bodies.
+    Does NOT exclude gripper ↔ block (that contact is needed!).
+  ══════════════════════════════════════════════════════════════════ -->
+  <contact>
+    <exclude body1="base"         body2="shoulder"/>
+    <exclude body1="shoulder"     body2="upper_arm"/>
+    <exclude body1="upper_arm"    body2="lower_arm"/>
+    <exclude body1="lower_arm"    body2="wrist"/>
+    <exclude body1="wrist"        body2="gripper_body"/>
+    <exclude body1="gripper_body" body2="jaw"/>
+    <!-- Base sits on table — exclude so it doesn't vibrate -->
+    <exclude body1="base"         body2="table"/>
+    <!-- Also skip non-adjacent links that can self-intersect at limits -->
+    <exclude body1="base"         body2="upper_arm"/>
+    <exclude body1="shoulder"     body2="lower_arm"/>
+    <exclude body1="upper_arm"    body2="wrist"/>
+  </contact>
+
+  <!-- ── Worldbody ────────────────────────────────────────────────── -->
+  <worldbody>
+
+    <!-- Lights -->
+    <light name="main" pos="0 0 3.5" dir="0 0 -1" directional="true"/>
+    <light name="fill" pos="0.5 -0.8 2.0" dir="-0.2 0.4 -0.9" diffuse="0.3 0.3 0.3"/>
+
+    <!-- Floor -->
+    <geom name="floor" type="plane" size="0 0 0.05"
+          pos="0 0 0" material="groundplane"
+          contype="1" conaffinity="1"
+          margin="0.001"
+          friction="0.6 0.02 0.01"
+          solref="0.002 1" solimp="0.995 0.999 0.0005 0.5 2"/>
+
+    <!-- ══════════════════════════════════════════════════════════════
+      TABLE
+      Fixed to world (no joint). Mass=30kg → immovable.
+      Table top surface exactly at z=0.46.
+      Covers x: -0.40→+0.40, y: -0.32→+0.44 (centred at y=+0.06)
+      Arm base at y=-0.25 is within this range ✓
+      Block at y=-0.08 is within this range ✓
+    ══════════════════════════════════════════════════════════════════ -->
+    <body name="table" pos="0 0 0">
+      <inertial mass="30.0" pos="0 0.06 0.23" diaginertia="2 2 1"/>
+
+      <geom name="table_top" type="box"
+            size="0.42 0.38 0.02" pos="0 0.06 0.44"
+            material="table_top"
+            contype="1" conaffinity="1"
+        margin="0.0015"
+            friction="0.5 0.02 0.01"
+        solref="0.002 1" solimp="0.995 0.999 0.0005 0.5 2"/>
+
+      <geom name="leg_fl" type="cylinder" size="0.025 0.21"
+            pos=" 0.38  0.40 0.21" material="table_leg"
+            contype="1" conaffinity="1"/>
+      <geom name="leg_fr" type="cylinder" size="0.025 0.21"
+            pos=" 0.38 -0.28 0.21" material="table_leg"
+            contype="1" conaffinity="1"/>
+      <geom name="leg_bl" type="cylinder" size="0.025 0.21"
+            pos="-0.38  0.40 0.21" material="table_leg"
+            contype="1" conaffinity="1"/>
+      <geom name="leg_br" type="cylinder" size="0.025 0.21"
+            pos="-0.38 -0.28 0.21" material="table_leg"
+            contype="1" conaffinity="1"/>
+    </body>
+
+    <!-- ══════════════════════════════════════════════════════════════
+      PICK BLOCK
+      Free joint → fully dynamic (6-DOF, affected by gravity & contact).
+      50g cube, 5cm per side.
+      Starts at x=0, y=-0.08 on the table surface.
+      contype=1 conaffinity=1 → collides with arm, table, floor.
+      High friction (1.5) so the gripper can lift it.
+    ══════════════════════════════════════════════════════════════════ -->
+    <body name="block" pos="0.0 -0.08 0.485">
+      <freejoint name="block_joint"/>
+      <inertial mass="0.050" pos="0 0 0"
+                diaginertia="5.21e-06 5.21e-06 5.21e-06"/>
+      <geom name="block_geom" type="box" size="0.025 0.025 0.025"
+            material="block_red"
+            contype="1" conaffinity="1"
+            condim="6"
+        margin="0.0015"
+            friction="1.5 0.05 0.01"
+        solref="0.002 1"
+        solimp="0.995 0.999 0.0005 0.5 2"/>
+      <site name="block_centre" pos="0 0 0"    size="0.004" rgba="1 1 0 1"/>
+      <site name="block_top"    pos="0 0 0.025" size="0.004" rgba="1 0.5 0 1"/>
+    </body>
+
+    <!-- ══════════════════════════════════════════════════════════════
+      PLACE ZONE
+      Static marker — no joint, no collision (ghost).
+      Block can be placed inside without bouncing.
+      Green translucent flat pad on the table surface.
+    ══════════════════════════════════════════════════════════════════ -->
+    <body name="place_zone" pos="0.15 -0.08 0.461">
+      <inertial mass="0.001" pos="0 0 0" diaginertia="1e-7 1e-7 1e-7"/>
+      <geom name="place_geom" type="box" size="0.038 0.038 0.001"
+            material="place_zone"
+            contype="0" conaffinity="0"/>
+      <site name="place_centre" pos="0 0 0.001" size="0.005" rgba="0 1 0 1"/>
+    </body>
+
+    <!-- ══════════════════════════════════════════════════════════════
+      CAMERAS
+    ══════════════════════════════════════════════════════════════════ -->
+    <!-- Overhead: looking straight down at the workspace -->
+    <camera name="workspace_cam"
+            pos="0 -0.15 1.10"
+            xyaxes="1 0 0  0 0.5 0.87"
+            fovy="50"/>
+    <!-- Side view for debugging -->
+    <camera name="side_cam"
+            pos="0.70 -0.15 0.80"
+            xyaxes="-0.07 1 0  -0.55 0 0.84"
+            fovy="50"/>
+
+    <!-- ══════════════════════════════════════════════════════════════
+      ADD FUTURE ELEMENTS BELOW THIS LINE
+    ══════════════════════════════════════════════════════════════════ -->
+
+  </worldbody>
+
+  <!-- ── Scene-level sensors ───────────────────────────────────────── -->
+  <sensor>
+    <framepos    name="block_pos"    objtype="body" objname="block"/>
+    <framequat   name="block_quat"   objtype="body" objname="block"/>
+    <framelinvel name="block_linvel" objtype="body" objname="block"/>
+    <frameangvel name="block_angvel" objtype="body" objname="block"/>
+    <framepos    name="place_pos"    objtype="site" objname="place_centre"/>
+  </sensor>
+
+</mujoco>
