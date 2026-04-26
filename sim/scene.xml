@@ -140,9 +140,9 @@
             material="block_red"
             contype="1" conaffinity="1"
             condim="6"
-        margin="0.0015"
-            friction="1.5 0.05 0.01"
-        solref="0.002 1"
+        margin="0.0004"
+          friction="1.2 0.02 0.005"
+        solref="0.001 1"
         solimp="0.995 0.999 0.0005 0.5 2"/>
       <site name="block_centre" pos="0 0 0"    size="0.004" rgba="1 1 0 1"/>
       <site name="block_top"    pos="0 0 0.025" size="0.004" rgba="1 0.5 0 1"/>
