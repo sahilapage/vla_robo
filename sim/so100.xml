@@ -9,7 +9,7 @@
     integrator = "implicitfast"
     cone       = "elliptic"
     impratio   = "10"
-    iterations = "80"
+    iterations = "120"
     noslip_iterations = "3"/>
 
   <!-- ══════════════════════════════════════════════════════════════════
@@ -39,8 +39,8 @@
             condim="6"
           margin="0.0015"
             friction="0.8 0.02 0.01"
-          solref="0.002 1"
-          solimp="0.995 0.999 0.0005 0.5 2"
+          solref="0.0012 1"
+          solimp="0.99 0.999 0.001 0.5 2"
             rgba="0 0 0 0"/>
     </default>
 
@@ -48,10 +48,10 @@
     <default class="gripper_col">
       <geom contype="1" conaffinity="1"
             condim="6"
-          margin="0.0002"
-            friction="1.6 0.02 0.005"
-            solref="0.001 1"
-          solimp="0.995 0.999 0.0005 0.5 2"
+          margin="0.00010"
+            friction="1.8 0.02 0.005"
+            solref="0.0007 1"
+          solimp="0.99 0.999 0.001 0.5 2"
             rgba="0 0 0 0"/>
     </default>
 
@@ -166,8 +166,8 @@
                 <geom class="gripper_col" type="box"
                       size="0.020 0.018 0.012" pos="0 -0.030 0"/>
                     <!-- Fixed finger pad collision (tuned to visual jaw thickness) -->
-                            <geom name="fixed_finger_col" class="gripper_col" type="capsule"
-                              fromto="0.002 -0.012 0  0.002 -0.050 0" size="0.0060"/>
+                                <geom name="fixed_finger_col" class="gripper_col" type="box"
+                                  size="0.0045 0.019 0.006" pos="0.002 -0.031 0"/>
 
                 <!-- End-effector site (between fingers at tip) -->
                 <site name="ee_site" pos="0 -0.072 0" size="0.007" rgba="0 1 0 1"/>
@@ -185,8 +185,8 @@
                          damping="0.2" frictionloss="0.05"/>
                   <geom class="visual"      type="mesh" mesh="Moving_Jaw" material="3d_printed"/>
                   <!-- Moving finger pad collision (mirrors fixed jaw pad) -->
-                  <geom name="moving_finger_col" class="gripper_col" type="capsule"
-                    fromto="-0.002 -0.012 0  -0.002 -0.050 0" size="0.0060"/>
+                  <geom name="moving_finger_col" class="gripper_col" type="box"
+                    size="0.0045 0.019 0.006" pos="-0.002 -0.031 0"/>
                   <!-- Moving finger touch site -->
                   <site name="finger_tip_r" pos="-0.002 -0.045 0" size="0.004" rgba="0 0 1 1"/>
                 </body>
@@ -207,7 +207,7 @@
     <position name="elbow_flex"    joint="elbow_flex"    class="arm_act" ctrlrange="-3.14158 0.0"/>
     <position name="wrist_flex"    joint="wrist_flex"    class="arm_act" kp="40" kv="5" ctrlrange="-2.5 1.2"/>
     <position name="wrist_roll"    joint="wrist_roll"    class="arm_act" kp="40" kv="5" ctrlrange="-3.14158 3.14158"/>
-    <position name="gripper_jaw"   joint="gripper_jaw"   class="arm_act" kp="70" kv="7" forcerange="-16 16" ctrlrange="-0.2 2.0"/>
+    <position name="gripper_jaw"   joint="gripper_jaw"   class="arm_act" kp="35" kv="10" forcerange="-6 6" ctrlrange="-0.2 2.0"/>
   </actuator>
 
   <!-- ── Sensors ────────────────────────────────────────────────────── -->
